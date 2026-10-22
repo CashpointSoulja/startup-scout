@@ -1,7 +1,9 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Toaster } from 'sonner';
+import { Footer } from '@/components/brand';
+import { Header } from '@/components/chrome';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -18,6 +20,14 @@ export const metadata: Metadata = {
   description: 'Finds UK startups running Next.js off Vercel and drafts the first message.'
 };
 
+export const viewport: Viewport = {
+  colorScheme: 'light dark',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0a0a0a' }
+  ]
+};
+
 export default function RootLayout({
   children
 }: Readonly<{
@@ -26,9 +36,13 @@ export default function RootLayout({
   return (
     <html lang="en-GB">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} flex min-h-dvh flex-col antialiased`}
       >
-        {children}
+        <Header />
+        <main id="content" className="flex-1">
+          {children}
+        </main>
+        <Footer />
         <Toaster />
       </body>
     </html>

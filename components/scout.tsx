@@ -13,6 +13,8 @@ type Run = {
 
 const SIZES = [10, 25, 50];
 
+const focusRing = 'focus-visible:shadow-[var(--ds-focus-ring)] focus-visible:outline-none';
+
 function hostLabel(lead: Lead) {
   const check = lead.site.reachable ? lead.site : lead.app;
   if (!check?.reachable) return '—';
@@ -27,169 +29,332 @@ function frameworkLabel(lead: Lead) {
   return found?.framework ?? '—';
 }
 
-function StatusBadge({ lead }: { lead: Lead }) {
-  const label = {
-    drafted: 'Drafted',
-    scored: 'Scored',
-    excluded: 'On Vercel',
-    unreachable: 'Unreachable'
-  }[lead.status];
-  const warn = lead.status === 'unreachable';
+const STATUS = {
+  drafted: { label: 'Drafted', dot: 'bg-[var(--ds-blue-700)]' },
+  scored: { label: 'Scored', dot: 'bg-[var(--ds-gray-700)]' },
+  excluded: { label: 'On Vercel', dot: 'bg-[var(--ds-gray-500)]' },
+  unreachable: { label: 'Unreachable', dot: 'bg-[var(--ds-amber-700)]' }
+} as const;
+
+function Status({ lead }: { lead: Lead }) {
+  const { label, dot } = STATUS[lead.status];
   return (
-    <span
-      className={`text-label-12 inline-flex h-5 items-center rounded-full px-2 ${
-        warn
-          ? 'bg-[var(--ds-amber-100)] text-[var(--ds-amber-900)]'
-          : 'bg-[var(--ds-gray-200)] text-[var(--ds-gray-1000)]'
-      }`}
-    >
+    <span className="text-label-14 inline-flex items-center gap-2 whitespace-nowrap">
+      <span className={`size-2.5 shrink-0 rounded-full ${dot}`} aria-hidden="true" />
       {label}
     </span>
   );
 }
 
-function CopyBlock({ label, text }: { label: string; text: string }) {
+function RunStatus({ status }: { status: string }) {
+  const running = status === 'running' || status === 'pending';
+  const done = status === 'completed';
+  const dot = running
+    ? 'bg-[var(--ds-amber-700)]'
+    : done
+      ? 'bg-[var(--ds-green-700)]'
+      : status === 'failed'
+        ? 'bg-[var(--ds-red-700)]'
+        : 'bg-[var(--ds-gray-700)]';
+  const label = running ? 'Running' : done ? 'Ready' : status === 'failed' ? 'Failed' : 'Finished';
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <h4 className="text-label-14 font-semibold">{label}</h4>
-        <button
-          type="button"
-          className="text-button-12 h-7 rounded-md px-2 shadow-[var(--ds-shadow-border)] hover:bg-[var(--ds-gray-100)] focus-visible:shadow-[var(--ds-focus-ring)] focus-visible:outline-none"
-          onClick={async () => {
-            await navigator.clipboard.writeText(text);
-            toast(`${label} copied`);
-          }}
-        >
-          Copy {label}
-        </button>
+    <span className="inline-flex items-center gap-2">
+      <span className={`size-2.5 rounded-full ${dot}`} aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
+function ScoreBar({ value }: { value: number }) {
+  return (
+    <span className="flex items-center justify-end gap-3">
+      <span
+        className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-[var(--ds-gray-alpha-200)] sm:block"
+        aria-hidden="true"
+      >
+        <span
+          className="block h-full rounded-full bg-[var(--ds-gray-1000)]"
+          style={{ width: `${value}%` }}
+        />
+      </span>
+      <span className="w-6 text-right tabular-nums">{value}</span>
+    </span>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" />
+      <path
+        d="M10.5 3.5v-.5A1.5 1.5 0 0 0 9 1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5"
+        stroke="currentColor"
+      />
+    </svg>
+  );
+}
+
+function ArrowUpRight() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M5 11 11 5M6 4.5h5.5V10" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3 border-t border-[var(--ds-gray-alpha-400)] pt-5">
+      <h3 className="text-heading-14">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+type DraftTab = 'email' | 'linkedin' | 'call';
+
+function Drafts({ lead }: { lead: Lead }) {
+  const [tab, setTab] = useState<DraftTab>('email');
+  const drafts = lead.drafts!;
+  const tabs: { id: DraftTab; label: string; text: string }[] = [
+    {
+      id: 'email',
+      label: 'Email',
+      text: `Subject: ${drafts.emailSubject}\n\n${drafts.emailBody}`
+    },
+    { id: 'linkedin', label: 'LinkedIn Note', text: drafts.linkedinNote },
+    { id: 'call', label: 'Call Opener', text: drafts.callOpener }
+  ];
+  const current = tabs.find((t) => t.id === tab)!;
+
+  return (
+    <Section title={`Drafts for ${drafts.persona}`}>
+      <div className="material-base overflow-hidden">
+        <div className="flex items-center justify-between gap-2 border-b border-[var(--ds-gray-alpha-400)] bg-[var(--ds-background-200)] pr-2">
+          <div role="tablist" aria-label="Draft type" className="flex min-w-0 overflow-x-auto px-1">
+            {tabs.map((t) => {
+              const active = t.id === tab;
+              return (
+                <button
+                  key={t.id}
+                  role="tab"
+                  type="button"
+                  aria-selected={active}
+                  onClick={() => setTab(t.id)}
+                  className={`text-label-13 relative h-10 shrink-0 px-3 transition-colors duration-150 ${focusRing} ${
+                    active
+                      ? 'text-[var(--ds-gray-1000)]'
+                      : 'text-[var(--ds-gray-900)] hover:text-[var(--ds-gray-1000)]'
+                  }`}
+                >
+                  {t.label}
+                  {active && (
+                    <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-[var(--ds-gray-1000)]" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            aria-label={`Copy ${current.label}`}
+            className={`flex size-8 shrink-0 items-center justify-center rounded-md text-[var(--ds-gray-900)] transition-colors duration-150 hover:bg-[var(--ds-gray-alpha-200)] hover:text-[var(--ds-gray-1000)] ${focusRing}`}
+            onClick={async () => {
+              await navigator.clipboard.writeText(current.text);
+              toast(`${current.label} copied`);
+            }}
+          >
+            <CopyIcon />
+          </button>
+        </div>
+        <p role="tabpanel" className="text-copy-14 whitespace-pre-wrap p-4">
+          {current.text}
+        </p>
       </div>
-      <p className="text-copy-14 whitespace-pre-wrap rounded-md bg-[var(--ds-background-200)] p-3 shadow-[var(--ds-shadow-border)]">
-        {text}
+      <p className="text-copy-13 text-[var(--ds-gray-900)]">
+        Sample drafts, written the way a Vercel Startups BDR would send them. Nothing here is sent.
       </p>
-    </div>
+    </Section>
   );
 }
 
 function LeadDetail({ lead }: { lead: Lead }) {
   const checks = [lead.site, lead.app].filter((c) => c?.reachable);
+  const facts = [
+    { label: 'Host', value: hostLabel(lead) },
+    { label: 'Framework', value: frameworkLabel(lead) },
+    { label: 'Batch', value: lead.batch ? `YC ${lead.batch}` : '—' },
+    { label: 'Team', value: lead.teamSize ? `${lead.teamSize} people` : '—' },
+    { label: 'Hiring', value: lead.isHiring ? 'Yes' : 'No' },
+    { label: 'Location', value: lead.location ?? '—' }
+  ];
 
   return (
-    <div className="flex min-w-0 flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-heading-20">{lead.name}</h2>
-          <span className="text-heading-20 tabular-nums">{lead.score.total}</span>
+    <div className="flex min-w-0 flex-col gap-5">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="text-heading-24 min-w-0 break-words">{lead.name}</h2>
+          {!lead.score.excluded && (
+            <div className="flex shrink-0 flex-col items-end">
+              <span className="text-heading-24 tabular-nums">{lead.score.total}</span>
+              <span className="text-label-12 text-[var(--ds-gray-900)]">Score</span>
+            </div>
+          )}
         </div>
         {lead.oneLiner && (
           <p className="text-copy-14 text-[var(--ds-gray-900)]">{lead.oneLiner}</p>
         )}
         <a
-          className="text-label-13-mono w-fit text-[var(--ds-gray-900)] underline-offset-4 hover:underline"
+          className={`text-label-13-mono inline-flex w-fit items-center gap-1 rounded-sm text-[var(--ds-gray-900)] hover:text-[var(--ds-gray-1000)] ${focusRing}`}
           href={lead.website}
           target="_blank"
           rel="noreferrer"
+          translate="no"
         >
           {lead.domain}
+          <ArrowUpRight />
         </a>
       </div>
 
       {lead.drafts && (
-        <p className="text-copy-14 rounded-md bg-[var(--ds-blue-100)] p-3 text-[var(--ds-blue-900)] shadow-[0_0_0_1px_var(--ds-blue-400)]">
-          <strong>Why now:</strong> {lead.drafts.whyNow}
-        </p>
+        <div className="text-copy-14 rounded-md border border-[var(--ds-gray-alpha-400)] bg-[var(--ds-background-200)] p-3">
+          <strong>Why Now:</strong> {lead.drafts.whyNow}
+        </div>
       )}
 
-      <section className="flex flex-col gap-2">
-        <h3 className="text-heading-14">Score</h3>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+        {facts.map((f) => (
+          <div key={f.label} className="flex min-w-0 flex-col gap-1">
+            <dt className="text-label-13 text-[var(--ds-gray-900)]">{f.label}</dt>
+            <dd className="text-label-14 truncate">{f.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <Section title="Score">
         {lead.score.excluded ? (
-          <p className="text-copy-14 text-[var(--ds-gray-900)]">{lead.score.excluded}</p>
+          <p className="text-copy-14 text-[var(--ds-gray-900)]">{lead.score.excluded}.</p>
         ) : (
-          <ul className="flex flex-col gap-1">
+          <ul className="flex flex-col">
             {lead.score.reasons.map((r) => (
-              <li key={r.label} className="text-copy-14 flex justify-between gap-3">
+              <li key={r.label} className="text-label-14 flex justify-between gap-3 py-1">
                 <span>{r.label}</span>
                 <span className="tabular-nums text-[var(--ds-gray-900)]">+{r.points}</span>
               </li>
             ))}
+            <li className="text-label-14 mt-1 flex justify-between gap-3 border-t border-dashed border-[var(--ds-gray-alpha-400)] pt-2 font-semibold">
+              <span>Total</span>
+              <span className="tabular-nums">{lead.score.total}</span>
+            </li>
           </ul>
         )}
-      </section>
+      </Section>
 
-      <section className="flex flex-col gap-2">
-        <h3 className="text-heading-14">Evidence</h3>
+      <Section title="Evidence">
         {checks.length === 0 && (
           <p className="text-copy-14 text-[var(--ds-gray-900)]">No response from the site.</p>
         )}
         {checks.map((c) => (
-          <div key={c!.url} className="flex flex-col gap-1">
-            <p className="text-copy-14">
-              <span className="text-label-13-mono">{c!.url}</span> · {c!.host} ·{' '}
-              {c!.framework}
+          <div key={c!.url} className="flex min-w-0 flex-col gap-2">
+            <p className="text-label-14 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-label-13-mono truncate" translate="no">
+                {c!.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+              </span>
+              <span className="text-[var(--ds-gray-900)]">
+                {c!.host} · {c!.framework}
+              </span>
             </p>
             {c!.evidence.length > 0 && (
-              <p className="text-copy-13 text-[var(--ds-gray-900)]">
+              <div className="flex flex-wrap gap-1.5">
                 {c!.evidence.map((e) => (
-                  <code key={e} className="text-label-12-mono mr-2">
+                  <code
+                    key={e}
+                    translate="no"
+                    className="text-label-12-mono rounded-sm bg-[var(--ds-gray-alpha-100)] px-1.5 py-0.5 shadow-[0_0_0_1px_var(--ds-gray-alpha-300)]"
+                  >
                     {e}
                   </code>
                 ))}
-              </p>
+              </div>
             )}
           </div>
         ))}
-      </section>
+      </Section>
 
       {lead.research && lead.research.contacts.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h3 className="text-heading-14">People</h3>
-          <ul className="flex flex-col gap-1">
+        <Section title="People">
+          <ul className="flex flex-col gap-3">
             {lead.research.contacts.map((c) => (
-              <li key={c.name} className="text-copy-14">
-                {c.name} <span className="text-[var(--ds-gray-900)]">· {c.title}</span>
+              <li key={c.name} className="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="text-label-12 flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--ds-gray-200)] font-medium"
+                >
+                  {initials(c.name)}
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-label-14 truncate">{c.name}</span>
+                  <span className="text-label-13 truncate text-[var(--ds-gray-900)]">
+                    {c.title}
+                  </span>
+                </span>
               </li>
             ))}
           </ul>
-        </section>
+        </Section>
       )}
 
       {lead.research && lead.research.jobs.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h3 className="text-heading-14">Open Roles</h3>
+        <Section title="Open Roles">
           <ul className="flex flex-col gap-1">
             {lead.research.jobs.slice(0, 5).map((j) => (
-              <li key={j.title} className="text-copy-14">
+              <li key={j.title} className="text-label-14 truncate">
                 {j.title}
               </li>
             ))}
           </ul>
-        </section>
+        </Section>
       )}
 
       {lead.drafts ? (
-        <section className="flex flex-col gap-4">
-          <h3 className="text-heading-14">Drafts for {lead.drafts.persona}</h3>
-          <p className="text-copy-13 text-[var(--ds-gray-900)]">
-            Sample drafts, written as a Vercel Startups BDR would send them. Ayo Ahmed does not
-            work at Vercel, and nothing here is sent.
-          </p>
-          <CopyBlock
-            label="Email"
-            text={`Subject: ${lead.drafts.emailSubject}\n\n${lead.drafts.emailBody}`}
-          />
-          <CopyBlock label="LinkedIn Note" text={lead.drafts.linkedinNote} />
-          <CopyBlock label="Call Opener" text={lead.drafts.callOpener} />
-        </section>
+        <Drafts key={lead.id} lead={lead} />
       ) : (
         !lead.score.excluded && (
-          <p className="text-copy-14 text-[var(--ds-gray-900)]">
-            Drafts are written only for the top leads with a stack signal (a modern JS framework off Vercel).
-          </p>
+          <Section title="Drafts">
+            <p className="text-copy-14 text-[var(--ds-gray-900)]">
+              Drafts are written only for top leads with a stack signal: a modern JavaScript
+              framework running somewhere other than Vercel.
+            </p>
+          </Section>
         )
       )}
     </div>
   );
 }
+
+function EmptyState({ running }: { running: boolean }) {
+  return (
+    <div className="material-base flex flex-col items-center gap-2 px-6 py-16 text-center">
+      <h2 className="text-heading-16">{running ? 'Checking Sites…' : 'No Leads Yet'}</h2>
+      <p className="text-copy-14 max-w-[44ch] text-[var(--ds-gray-900)]">
+        {running
+          ? 'Leads appear here as each site is checked. A full run takes about 30 seconds.'
+          : 'Run Scout to check the newest UK startups from the YC directory.'}
+      </p>
+    </div>
+  );
+}
+
+type View = 'prospects' | 'all';
 
 export function Scout() {
   const [size, setSize] = useState(25);
@@ -198,6 +363,7 @@ export function Scout() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [view, setView] = useState<View>('prospects');
 
   const refresh = useCallback(async () => {
     const { run } = (await fetch('/api/scout').then((r) => r.json())) as { run: Run | null };
@@ -221,12 +387,18 @@ export function Scout() {
     return () => clearInterval(timer);
   }, [running, refresh]);
 
+  const visible = useMemo(
+    () => (view === 'all' ? leads : leads.filter((l) => !l.score.excluded)),
+    [leads, view]
+  );
+
   const selected = useMemo(
-    () => leads.find((l) => l.id === selectedId) ?? leads[0] ?? null,
-    [leads, selectedId]
+    () => visible.find((l) => l.id === selectedId) ?? visible[0] ?? null,
+    [visible, selectedId]
   );
 
   const drafted = leads.filter((l) => l.drafts).length;
+  const onVercel = leads.filter((l) => l.status === 'excluded').length;
 
   async function startRun(e: React.FormEvent) {
     e.preventDefault();
@@ -256,131 +428,235 @@ export function Scout() {
     }
   }
 
+  const summary = run
+    ? [
+        { label: 'Status', value: <RunStatus status={running ? 'running' : run.status} /> },
+        {
+          label: 'Checked',
+          value: (
+            <span className="tabular-nums">
+              {leads.length} of {run.total}
+            </span>
+          )
+        },
+        { label: 'Drafted', value: <span className="tabular-nums">{drafted}</span> },
+        { label: 'Already on Vercel', value: <span className="tabular-nums">{onVercel}</span> },
+        { label: 'Source', value: 'YC directory' },
+        {
+          label: 'Run',
+          value: (
+            <span className="text-label-14-mono" translate="no">
+              {run.runId.slice(-8).toLowerCase()}
+            </span>
+          )
+        }
+      ]
+    : [];
+
   return (
-    <div className="mx-auto flex w-full max-w-[1400px] min-w-0 flex-col gap-8 px-4 py-8 md:px-8">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-heading-32">Startup Scout</h1>
-        <p className="text-copy-16 max-w-[64ch] text-[var(--ds-gray-900)]">
-          Finds UK startups running Next.js somewhere other than Vercel, scores why they need it
-          now, and drafts the first message. Nothing is sent.
-        </p>
-      </header>
+    <>
+      <div className="border-b border-[var(--ds-gray-alpha-400)]">
+        <div className="mx-auto flex max-w-[var(--ds-page-width-wide)] flex-col gap-8 px-4 py-10 md:px-6">
+          <div className="flex flex-col gap-2">
+            <h1 className="text-heading-32 text-balance">Leads</h1>
+            <p className="text-copy-16 max-w-[var(--ds-reading-width)] text-[var(--ds-gray-900)]">
+              UK startups running a modern framework somewhere other than Vercel, ranked by why
+              they need it now. Each lead gets a first message for a person to review.
+            </p>
+          </div>
 
-      <form
-        onSubmit={startRun}
-        className="flex flex-col gap-3 md:flex-row md:items-end"
-      >
-        <label className="flex flex-col gap-1">
-          <span className="text-label-13 text-[var(--ds-gray-900)]">Companies</span>
-          <select
-            value={size}
-            onChange={(e) => setSize(Number(e.target.value))}
-            className="text-copy-16 md:text-copy-14 h-9 rounded-md border border-[var(--ds-gray-alpha-400)] bg-[var(--ds-background-100)] px-2 focus-visible:shadow-[var(--ds-focus-ring)] focus-visible:outline-none"
-          >
-            {SIZES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-label-13 text-[var(--ds-gray-900)]">Extra Domains</span>
-          <input
-            value={domains}
-            onChange={(e) => setDomains(e.target.value)}
-            placeholder="acme.ai, example.co.uk"
-            className="text-copy-16 md:text-copy-14 h-9 rounded-md border border-[var(--ds-gray-alpha-400)] bg-[var(--ds-background-100)] px-3 focus-visible:shadow-[var(--ds-focus-ring)] focus-visible:outline-none"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={starting || running}
-          className="text-button-14 h-9 rounded-md bg-[var(--ds-gray-1000)] px-4 text-[var(--ds-background-100)] transition-opacity duration-150 hover:opacity-90 focus-visible:shadow-[var(--ds-focus-ring)] focus-visible:outline-none disabled:opacity-50"
-        >
-          {starting ? 'Starting…' : running ? 'Scouting…' : 'Run Scout'}
-        </button>
-      </form>
+          <form onSubmit={startRun} className="flex flex-col gap-3 md:flex-row md:items-end">
+            <label className="flex flex-col gap-2">
+              <span className="text-label-13 text-[var(--ds-gray-900)]">Companies</span>
+              <select
+                name="companies"
+                value={size}
+                onChange={(e) => setSize(Number(e.target.value))}
+                className={`text-copy-16 md:text-label-14 h-10 rounded-md bg-[var(--ds-background-100)] px-3 shadow-[var(--ds-shadow-border)] hover:shadow-[0_0_0_1px_var(--ds-gray-alpha-500)] md:h-9 md:w-28 ${focusRing}`}
+              >
+                {SIZES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-0 flex-1 flex-col gap-2">
+              <span className="text-label-13 text-[var(--ds-gray-900)]">Extra Domains</span>
+              <input
+                name="domains"
+                value={domains}
+                onChange={(e) => setDomains(e.target.value)}
+                placeholder="acme.ai, example.co.uk"
+                autoComplete="off"
+                spellCheck={false}
+                className={`text-copy-16 md:text-label-14 h-10 rounded-md bg-[var(--ds-background-100)] px-3 shadow-[var(--ds-shadow-border)] placeholder:text-[var(--ds-gray-700)] hover:shadow-[0_0_0_1px_var(--ds-gray-alpha-500)] md:h-9 ${focusRing}`}
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={starting || running}
+              className={`text-button-14 flex h-10 items-center justify-center gap-2 rounded-md bg-[var(--ds-gray-1000)] px-4 text-[var(--ds-background-100)] transition-colors duration-150 hover:bg-[var(--ds-gray-1000)]/90 disabled:cursor-not-allowed disabled:bg-[var(--ds-gray-100)] disabled:text-[var(--ds-gray-700)] disabled:shadow-[var(--ds-shadow-border)] md:h-9 ${focusRing}`}
+            >
+              {(starting || running) && (
+                <span
+                  aria-hidden="true"
+                  className="size-3.5 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none"
+                />
+              )}
+              {starting ? 'Starting…' : running ? 'Scouting…' : 'Run Scout'}
+            </button>
+          </form>
 
-      {run && (
-        <p className="text-copy-14 text-[var(--ds-gray-900)]" aria-live="polite">
-          <span className="tabular-nums">
-            {leads.length} of {run.total}
-          </span>{' '}
-          checked · <span className="tabular-nums">{drafted}</span> drafted ·{' '}
-          {running ? 'running' : run.status} · run{' '}
-          <span className="text-label-13-mono">{run.runId.slice(-8)}</span>
-        </p>
-      )}
+          {run && (
+            <dl
+              aria-live="polite"
+              className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-6"
+            >
+              {summary.map((s) => (
+                <div key={s.label} className="flex min-w-0 flex-col gap-1">
+                  <dt className="text-label-13 text-[var(--ds-gray-900)]">{s.label}</dt>
+                  <dd className="text-label-14">{s.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      </div>
 
-      {leads.length === 0 ? (
-        <p className="text-copy-14 text-[var(--ds-gray-900)]">
-          {running ? 'Checking sites…' : 'No leads yet. Run Scout to check the newest UK startups.'}
-        </p>
-      ) : (
-        <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-12">
-          <div className="min-w-0 overflow-x-auto lg:col-span-7">
-            <table className="w-full min-w-[560px] border-collapse">
-              <thead>
-                <tr className="text-label-13 text-left text-[var(--ds-gray-900)]">
-                  <th className="py-2 pr-3 font-normal">Company</th>
-                  <th className="py-2 pr-3 font-normal">Host</th>
-                  <th className="py-2 pr-3 font-normal">Framework</th>
-                  <th className="py-2 pr-3 text-right font-normal">Score</th>
-                  <th className="py-2 font-normal">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leads.map((lead) => (
-                  <tr
-                    key={lead.id}
-                    onClick={() => setSelectedId(lead.id)}
-                    className={`text-copy-14 cursor-pointer border-t border-[var(--ds-gray-alpha-400)] hover:bg-[var(--ds-gray-100)] ${
-                      selected?.id === lead.id ? 'bg-[var(--ds-gray-100)]' : ''
+      <div className="mx-auto flex max-w-[var(--ds-page-width-wide)] flex-col gap-4 px-4 py-8 md:px-6">
+        {leads.length === 0 ? (
+          <EmptyState running={running} />
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div
+                role="radiogroup"
+                aria-label="Show"
+                className="flex h-9 items-center gap-1 rounded-md bg-[var(--ds-background-100)] p-1 shadow-[var(--ds-shadow-border)]"
+              >
+                {(
+                  [
+                    ['prospects', 'Prospects'],
+                    ['all', 'All Companies']
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={view === id}
+                    onClick={() => {
+                      setView(id);
+                      setSelectedId(null);
+                    }}
+                    className={`text-label-14 h-7 rounded-sm px-3 transition-colors duration-150 ${focusRing} ${
+                      view === id
+                        ? 'bg-[var(--ds-gray-200)] text-[var(--ds-gray-1000)]'
+                        : 'text-[var(--ds-gray-900)] hover:text-[var(--ds-gray-1000)]'
                     }`}
                   >
-                    <td className="py-2 pr-3">
-                      <button
-                        type="button"
-                        className="text-left focus-visible:shadow-[var(--ds-focus-ring)] focus-visible:outline-none"
-                        onClick={() => setSelectedId(lead.id)}
-                      >
-                        <span className="font-medium">{lead.name}</span>
-                        {lead.batch && (
-                          <span className="text-[var(--ds-gray-900)]"> · {lead.batch}</span>
-                        )}
-                      </button>
-                    </td>
-                    <td className="py-2 pr-3">{hostLabel(lead)}</td>
-                    <td className="py-2 pr-3">{frameworkLabel(lead)}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">
-                      {lead.score.excluded ? '—' : lead.score.total}
-                    </td>
-                    <td className="py-2">
-                      <StatusBadge lead={lead} />
-                    </td>
-                  </tr>
+                    {label}
+                  </button>
                 ))}
-              </tbody>
-            </table>
-          </div>
-          <aside className="material-base min-w-0 p-4 md:p-6 lg:col-span-5 lg:self-start">
-            {selected && <LeadDetail lead={selected} />}
-          </aside>
-        </div>
-      )}
+              </div>
+              <p className="text-label-14 text-[var(--ds-gray-900)]">
+                <span className="tabular-nums">{visible.length}</span>{' '}
+                {visible.length === 1 ? 'company' : 'companies'}
+              </p>
+            </div>
 
-      <footer className="text-copy-13 flex flex-col gap-1 border-t border-[var(--ds-gray-alpha-400)] pt-4 text-[var(--ds-gray-900)]">
-        <p>
-          Built by Ayo Ahmed as an independent project; not affiliated with Vercel. Public sources
-          only: the YC company directory and public web pages. Drafts are for human review;
-          nothing is sent.
-        </p>
-        <p>
-          Vercel, the Vercel design, Next.js and related marks, designs and logos are trademarks or
-          registered trademarks of Vercel, Inc. or its affiliates in the US and other countries.
-        </p>
-      </footer>
-    </div>
+            <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-12">
+              <div className="material-base min-w-0 overflow-x-auto lg:col-span-7">
+                <table className="w-full min-w-[600px] border-collapse">
+                  <caption className="sr-only">
+                    Companies checked in this run, highest score first
+                  </caption>
+                  <thead>
+                    <tr className="text-label-13 border-b border-[var(--ds-gray-alpha-400)] bg-[var(--ds-background-200)] text-left text-[var(--ds-gray-900)]">
+                      <th scope="col" className="h-10 px-4 font-normal">
+                        Company
+                      </th>
+                      <th scope="col" className="h-10 px-3 font-normal">
+                        Host
+                      </th>
+                      <th scope="col" className="h-10 px-3 font-normal">
+                        Framework
+                      </th>
+                      <th scope="col" className="h-10 px-3 text-right font-normal">
+                        Score
+                      </th>
+                      <th scope="col" className="h-10 px-4 font-normal">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visible.map((lead) => {
+                      const isSelected = selected?.id === lead.id;
+                      return (
+                        <tr
+                          key={lead.id}
+                          onClick={() => setSelectedId(lead.id)}
+                          className={`text-label-14 cursor-pointer border-t border-[var(--ds-gray-alpha-400)] transition-colors duration-150 first:border-t-0 ${
+                            isSelected
+                              ? 'bg-[var(--ds-gray-100)]'
+                              : 'hover:bg-[var(--ds-gray-alpha-100)]'
+                          }`}
+                        >
+                          <td className="relative h-14 px-4">
+                            {isSelected && (
+                              <span
+                                aria-hidden="true"
+                                className="absolute inset-y-0 left-0 w-0.5 bg-[var(--ds-gray-1000)]"
+                              />
+                            )}
+                            <button
+                              type="button"
+                              aria-pressed={isSelected}
+                              className={`flex flex-col rounded-sm text-left ${focusRing}`}
+                              onClick={() => setSelectedId(lead.id)}
+                            >
+                              <span className="font-medium">{lead.name}</span>
+                              <span className="text-label-13 text-[var(--ds-gray-900)]">
+                                {lead.batch ?? lead.domain}
+                              </span>
+                            </button>
+                          </td>
+                          <td className="h-14 px-3">{hostLabel(lead)}</td>
+                          <td className="h-14 px-3">{frameworkLabel(lead)}</td>
+                          <td className="h-14 px-3 text-right">
+                            {lead.score.excluded ? (
+                              <span className="text-[var(--ds-gray-900)]">—</span>
+                            ) : (
+                              <ScoreBar value={lead.score.total} />
+                            )}
+                          </td>
+                          <td className="h-14 px-4">
+                            <Status lead={lead} />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <aside
+                aria-label="Lead details"
+                className="material-base min-w-0 p-5 md:p-6 lg:sticky lg:top-[124px] lg:col-span-5 lg:max-h-[calc(100dvh-148px)] lg:overflow-y-auto"
+              >
+                {selected ? (
+                  <LeadDetail lead={selected} />
+                ) : (
+                  <p className="text-copy-14 text-[var(--ds-gray-900)]">
+                    No prospects in this run. Show all companies to see the rest.
+                  </p>
+                )}
+              </aside>
+            </div>
+          </>
+        )}
+      </div>
+    </>
   );
 }
