@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { Chevron } from '@/components/run-form';
+import { startScout } from '@/lib/start-scout';
 import { Lead } from '@/lib/types';
 
 type Run = {
@@ -378,6 +380,8 @@ export function Scout() {
   const running = run?.status === 'running' || run?.status === 'pending';
 
   useEffect(() => {
+    const lead = new URLSearchParams(window.location.search).get('lead');
+    if (lead) setSelectedId(lead);
     refresh();
   }, [refresh]);
 
@@ -404,20 +408,8 @@ export function Scout() {
     e.preventDefault();
     setStarting(true);
     try {
-      const res = await fetch('/api/scout', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          limit: size,
-          domains: domains
-            .split(/[\s,]+/)
-            .map((d) => d.trim())
-            .filter(Boolean)
-        })
-      });
-      const body = (await res.json()) as { runId?: string; error?: string };
-      if (!res.ok || !body.runId) throw new Error(body.error ?? `Status ${res.status}`);
-      setRun({ runId: body.runId, startedAt: new Date().toISOString(), total: size, status: 'running' });
+      const runId = await startScout(size, domains);
+      setRun({ runId, startedAt: new Date().toISOString(), total: size, status: 'running' });
       setLeads([]);
       setSelectedId(null);
       toast('Scout started');
@@ -458,7 +450,7 @@ export function Scout() {
       <div className="border-b border-[var(--ds-gray-alpha-400)]">
         <div className="mx-auto flex max-w-[var(--ds-page-width-wide)] flex-col gap-8 px-4 py-10 md:px-6">
           <div className="flex flex-col gap-2">
-            <h1 className="text-heading-32 text-balance">Leads</h1>
+            <h1 className="font-pixel text-heading-48 text-balance">Leads</h1>
             <p className="text-copy-16 max-w-[var(--ds-reading-width)] text-[var(--ds-gray-900)]">
               UK startups running a modern framework somewhere other than Vercel, ranked by why
               they need it now. Each lead gets a first message for a person to review.
@@ -468,11 +460,12 @@ export function Scout() {
           <form onSubmit={startRun} className="flex flex-col gap-3 md:flex-row md:items-end">
             <label className="flex flex-col gap-2">
               <span className="text-label-13 text-[var(--ds-gray-900)]">Companies</span>
+              <span className="relative flex">
               <select
                 name="companies"
                 value={size}
                 onChange={(e) => setSize(Number(e.target.value))}
-                className={`text-copy-16 md:text-label-14 h-10 rounded-md bg-[var(--ds-background-100)] px-3 shadow-[var(--ds-shadow-border)] hover:shadow-[0_0_0_1px_var(--ds-gray-alpha-500)] md:h-9 md:w-28 ${focusRing}`}
+                className={`text-copy-16 md:text-label-14 h-10 rounded-md bg-[var(--ds-background-100)] px-3 shadow-[var(--ds-shadow-border)] hover:shadow-[0_0_0_1px_var(--ds-gray-alpha-500)] w-full md:h-9 md:w-28 appearance-none pr-9 ${focusRing}`}
               >
                 {SIZES.map((s) => (
                   <option key={s} value={s}>
@@ -480,6 +473,8 @@ export function Scout() {
                   </option>
                 ))}
               </select>
+              <Chevron />
+              </span>
             </label>
             <label className="flex min-w-0 flex-1 flex-col gap-2">
               <span className="text-label-13 text-[var(--ds-gray-900)]">Extra Domains</span>
@@ -515,7 +510,7 @@ export function Scout() {
             >
               {summary.map((s) => (
                 <div key={s.label} className="flex min-w-0 flex-col gap-1">
-                  <dt className="text-label-13 text-[var(--ds-gray-900)]">{s.label}</dt>
+                  <dt className="font-mono-caps text-label-12 text-[var(--ds-gray-900)]">{s.label}</dt>
                   <dd className="text-label-14">{s.value}</dd>
                 </div>
               ))}

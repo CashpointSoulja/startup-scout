@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Geist, Geist_Mono, Geist_Pixel } from 'next/font/google';
 import './globals.css';
 import { Toaster } from 'sonner';
 import { Footer } from '@/components/brand';
@@ -13,6 +13,12 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: '--font-geist-mono',
   subsets: ['latin']
+});
+
+const geistPixel = Geist_Pixel({
+  variable: '--font-geist-pixel',
+  subsets: ['latin'],
+  axes: ['ELSH']
 });
 
 export const metadata: Metadata = {
@@ -36,7 +42,7 @@ export default function RootLayout({
   return (
     <html lang="en-GB">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} flex min-h-dvh flex-col antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${geistPixel.variable} flex min-h-dvh flex-col antialiased`}
       >
         <Header />
         <main id="content" className="flex-1">

@@ -54,3 +54,17 @@
     font-family: var(--font-geist-sans);
   }
 }
+
+/* Display headlines in Geist Pixel (pixel-square setting), and mono uppercase labels */
+.font-pixel {
+  font-family: var(--font-geist-pixel), var(--font-geist-mono);
+  font-variation-settings: 'ELSH' 20;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.font-mono-caps {
+  font-family: var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}

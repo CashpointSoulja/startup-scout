@@ -5,8 +5,8 @@ import { usePathname } from 'next/navigation';
 import { GitHubIcon, Mark, REPO_URL, Slash } from '@/components/brand';
 
 const TABS = [
-  { href: '/', label: 'Leads' },
-  { href: '/how-it-works', label: 'How It Works' }
+  { href: '/', label: 'Overview' },
+  { href: '/leads', label: 'Leads' }
 ];
 
 export function Header() {
