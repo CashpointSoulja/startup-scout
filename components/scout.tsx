@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { AsciiSpinner, Radar, Scramble } from '@/components/ascii';
 import { Chevron } from '@/components/run-form';
 import { startScout } from '@/lib/start-scout';
 import { Lead } from '@/lib/types';
@@ -61,7 +62,11 @@ function RunStatus({ status }: { status: string }) {
   const label = running ? 'Running' : done ? 'Ready' : status === 'failed' ? 'Failed' : 'Finished';
   return (
     <span className="inline-flex items-center gap-2">
-      <span className={`size-2.5 rounded-full ${dot}`} aria-hidden="true" />
+      {running ? (
+        <AsciiSpinner className="w-2.5 text-[var(--ds-amber-900)]" />
+      ) : (
+        <span className={`size-2.5 rounded-full ${dot}`} aria-hidden="true" />
+      )}
       {label}
     </span>
   );
@@ -346,6 +351,7 @@ function LeadDetail({ lead }: { lead: Lead }) {
 function EmptyState({ running }: { running: boolean }) {
   return (
     <div className="material-base flex flex-col items-center gap-2 px-6 py-16 text-center">
+      {running && <Radar mode="ascii" cols={30} rows={18} className="mb-4 aspect-[30/18] w-64" />}
       <h2 className="text-heading-16">{running ? 'Checking Sites…' : 'No Leads Yet'}</h2>
       <p className="text-copy-14 max-w-[44ch] text-[var(--ds-gray-900)]">
         {running
@@ -450,7 +456,7 @@ export function Scout() {
       <div className="border-b border-[var(--ds-gray-alpha-400)]">
         <div className="mx-auto flex max-w-[var(--ds-page-width-wide)] flex-col gap-8 px-4 py-10 md:px-6">
           <div className="flex flex-col gap-2">
-            <h1 className="font-pixel text-heading-48 text-balance">Leads</h1>
+            <Scramble as="h1" text="Leads" className="font-pixel text-heading-48 text-balance" />
             <p className="text-copy-16 max-w-[var(--ds-reading-width)] text-[var(--ds-gray-900)]">
               UK startups running a modern framework somewhere other than Vercel, ranked by why
               they need it now. Each lead gets a first message for a person to review.
@@ -493,12 +499,7 @@ export function Scout() {
               disabled={starting || running}
               className={`text-button-14 flex h-10 items-center justify-center gap-2 rounded-md bg-[var(--ds-gray-1000)] px-4 text-[var(--ds-background-100)] transition-colors duration-150 hover:bg-[var(--ds-gray-1000)]/90 disabled:cursor-not-allowed disabled:bg-[var(--ds-gray-100)] disabled:text-[var(--ds-gray-700)] disabled:shadow-[var(--ds-shadow-border)] md:h-9 ${focusRing}`}
             >
-              {(starting || running) && (
-                <span
-                  aria-hidden="true"
-                  className="size-3.5 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none"
-                />
-              )}
+              {(starting || running) && <AsciiSpinner />}
               {starting ? 'Starting…' : running ? 'Scouting…' : 'Run Scout'}
             </button>
           </form>
